@@ -1,0 +1,132 @@
+name: Deploy NixOS VPS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "Full nixos-anywhere install — WIPES THE TARGET DISK"
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Evaluate the full system before anything touches the VPS. Catches
+  # typos/eval errors in PRs and blocks broken deploys.
+  # ---------------------------------------------------------------------
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Evaluate system configuration
+        run: |
+          nix build .#nixosConfigurations.vps.config.system.build.toplevel \
+            --dry-run
+
+  # ---------------------------------------------------------------------
+  # One-time (or disaster-recovery) install. Repartitions the disk with
+  # disko and installs NixOS from scratch. Manual trigger only.
+  # ---------------------------------------------------------------------
+  bootstrap:
+    if: github.event_name == 'workflow_dispatch' && inputs.bootstrap
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Load deploy SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          ssh-add - <<< "$VPS_SSH_KEY"
+
+      # If SOPS_AGE_KEY is set, plant the age key on the new system so
+      # sops-nix secrets (e.g. the Tailscale auth key) work from first boot.
+      - name: Prepare extra files (sops age key)
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          EXTRA_FILES_ARGS=""
+          if [ -n "$SOPS_AGE_KEY" ]; then
+            mkdir -p extra-files/var/lib/sops-nix
+            printf '%s\n' "$SOPS_AGE_KEY" > extra-files/var/lib/sops-nix/key.txt
+            chmod 600 extra-files/var/lib/sops-nix/key.txt
+            EXTRA_FILES_ARGS="--extra-files extra-files"
+          fi
+          echo "EXTRA_FILES_ARGS=$EXTRA_FILES_ARGS" >> "$GITHUB_ENV"
+
+      - name: Install NixOS with nixos-anywhere
+        run: |
+          nix run github:nix-community/nixos-anywhere/1.13.0 -- \
+            --flake .#vps \
+            --build-on-remote \
+            --ssh-option "StrictHostKeyChecking=accept-new" \
+            $EXTRA_FILES_ARGS \
+            root@${{ secrets.VPS_IP }}
+
+  # ---------------------------------------------------------------------
+  # Regular deploys on push: rebuild the existing system in place.
+  # (Running nixos-anywhere on every push would reinstall the OS.)
+  # ---------------------------------------------------------------------
+  deploy:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Load deploy SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          ssh-add - <<< "$VPS_SSH_KEY"
+
+      # Pin the VPS host key when the VPS_KNOWN_HOSTS secret is set
+      # (`ssh-keyscan <ip>` output); otherwise trust on first use.
+      - name: Configure SSH host key checking
+        env:
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          if [ -n "$VPS_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            echo "NIX_SSHOPTS=-o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
+          else
+            echo "NIX_SSHOPTS=-o StrictHostKeyChecking=accept-new" >> "$GITHUB_ENV"
+          fi
+
+      - name: nixos-rebuild switch (build on the VPS)
+        run: |
+          nix run nixpkgs#nixos-rebuild -- switch \
+            --flake .#vps \
+            --target-host root@${{ secrets.VPS_IP }} \
+            --build-host root@${{ secrets.VPS_IP }}
