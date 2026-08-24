@@ -124,12 +124,8 @@ in
   ###########################################################################
   virtualisation.docker = {
     enable = true;
-    # Docker's json-file driver never rotates by default — on a small SSD
-    # container logs would eventually fill the disk.
-    daemon.settings."log-opts" = {
-      "max-size" = "10m";
-      "max-file" = "3";
-    };
+    # Container logs go to the journald driver (NixOS default), which the
+    # journal's own 200 MB cap already rotates — no per-container log-opts.
     autoPrune = {
       enable = true;
       dates = "weekly";
