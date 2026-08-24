@@ -2,9 +2,8 @@ name: Update flake.lock
 
 # system.autoUpgrade on the VPS rebuilds against the flake.lock committed
 # here — without this workflow the nightly "upgrade" would rebuild the same
-# pinned nixpkgs forever. The weekly PR auto-merges once CI's check job
-# passes, so OS/security updates ship hands-off (see README for the
-# required repo settings).
+# pinned nixpkgs forever. The weekly PR is merged manually; a ntfy push
+# (NTFY_TOKEN secret) says when one is waiting.
 
 on:
   schedule:
@@ -36,11 +35,14 @@ jobs:
           pr-title: "chore: update flake.lock"
           pr-labels: dependencies
 
-      - name: Enable auto-merge
+      - name: Notify via ntfy
         if: steps.update.outputs.pull-request-number != ''
         env:
-          GH_TOKEN: ${{ secrets.FLAKE_UPDATE_TOKEN || github.token }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
           PR_NUMBER: ${{ steps.update.outputs.pull-request-number }}
         run: |
-          gh pr merge --auto --squash "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" || \
-            echo "::warning::Could not enable auto-merge — merge PR #$PR_NUMBER manually (check repo settings, see README)"
+          curl -fsS -H "Authorization: Bearer $NTFY_TOKEN" \
+            -H "Title: flake.lock update ready to merge" \
+            -H "Tags: package" \
+            -d "https://github.com/$GITHUB_REPOSITORY/pull/$PR_NUMBER" \
+            https://ntfy.kallio.dev/alerts
