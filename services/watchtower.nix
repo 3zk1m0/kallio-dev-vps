@@ -4,7 +4,8 @@
 
 {
   virtualisation.oci-containers.containers.watchtower = {
-    image = "containrrr/watchtower:latest";
+    # No rolling tags published — bump manually.
+    image = "containrrr/watchtower:1.7.1";
     volumes = [ "/var/run/docker.sock:/var/run/docker.sock" ];
     environment = {
       WATCHTOWER_CLEANUP = "true";

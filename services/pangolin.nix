@@ -50,10 +50,6 @@ let
   '';
 
   traefikStatic = pkgs.writeText "traefik_config.yml" ''
-    api:
-      insecure: true
-      dashboard: true
-
     providers:
       http:
         endpoint: "http://pangolin:3001/api/v1/traefik-config"
@@ -238,13 +234,15 @@ in
 
   virtualisation.oci-containers.containers = {
     pangolin = {
-      image = "fosrl/pangolin:latest";
+      # Rolling patch tag: Watchtower pulls 1.21.x patches, minor bumps are manual.
+      image = "fosrl/pangolin:1.21";
       volumes = [ "${dataDir}/config:/app/config" ];
       extraOptions = [ "--network=pangolin" ];
     };
 
     gerbil = {
-      image = "fosrl/gerbil:latest";
+      # Gerbil publishes no rolling tags — bump manually alongside badgerVersion.
+      image = "fosrl/gerbil:1.5.0";
       dependsOn = [ "pangolin" ];
       cmd = [
         "--reachableAt=http://gerbil:3004"
