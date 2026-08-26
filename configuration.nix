@@ -57,6 +57,9 @@ in
   ###########################################################################
   services.openssh = {
     enable = true;
+    # SSH is tailnet-only: no public port 22. CI deploys join the tailnet
+    # as ephemeral nodes; recovery without Tailscale = provider VNC console.
+    openFirewall = false;
     settings = {
       PermitRootLogin = "prohibit-password";
       PasswordAuthentication = false;
@@ -83,7 +86,6 @@ in
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-      22   # SSH
       80   # HTTP (ACME challenges / redirect)
       443  # HTTPS
     ];

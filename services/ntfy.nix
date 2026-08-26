@@ -4,7 +4,8 @@
 
 {
   virtualisation.oci-containers.containers.ntfy = {
-    image = "binwiederhier/ntfy:latest";
+    # Rolling major tag: Watchtower pulls v2.x updates.
+    image = "binwiederhier/ntfy:v2";
     cmd = [ "serve" ];
     environment = {
       NTFY_BASE_URL = "https://${vars.ntfyDomain}";
