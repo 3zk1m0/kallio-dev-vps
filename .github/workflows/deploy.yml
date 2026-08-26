@@ -101,6 +101,16 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      # Deploys go over the tailnet (ephemeral CI node), so port 22 never
+      # needs to be open to the internet. Bootstrap still uses the public IP —
+      # a freshly installed system isn't on the tailnet yet.
+      - name: Join tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Load deploy SSH key
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -111,7 +121,7 @@ jobs:
           ssh-add - <<< "$VPS_SSH_KEY"
 
       # Pin the VPS host key when the VPS_KNOWN_HOSTS secret is set
-      # (`ssh-keyscan <ip>` output); otherwise trust on first use.
+      # (`ssh-keyscan <tailnet ip>` output); otherwise trust on first use.
       - name: Configure SSH host key checking
         env:
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
@@ -128,5 +138,5 @@ jobs:
         run: |
           nix run nixpkgs#nixos-rebuild -- switch \
             --flake .#vps \
-            --target-host root@${{ secrets.VPS_IP }} \
-            --build-host root@${{ secrets.VPS_IP }}
+            --target-host root@${{ secrets.VPS_TAILNET_IP }} \
+            --build-host root@${{ secrets.VPS_TAILNET_IP }}
