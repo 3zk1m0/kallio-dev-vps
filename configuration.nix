@@ -14,6 +14,7 @@ in
     ./services/ntfy.nix
     ./services/uptime-kuma.nix
     ./services/bandwidth-alert.nix
+    ./services/backup.nix
   ];
 
   ###########################################################################
