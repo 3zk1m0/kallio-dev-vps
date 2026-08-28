@@ -12,6 +12,9 @@
   sshKeys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDxpFdDaKOheemL7LYPaEv0qrhu9eQpAlHG7GhJTLL4p deploy@github-actions"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP1Sd29s/9BMJeUy5E3JdJZJEyovXgn0VCem5vPpd/yy tietokettu-vps"
+    # TrueNAS backup puller: can only stream `vps-backup`, nothing else — so a
+    # stolen NAS key can read the state it already holds, not own the box.
+    ''restrict,command="/run/current-system/sw/bin/vps-backup" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOguW9VOYMoxXYVDtwKWxXpk2djFfg0tcyIADCd001yg truenas-vps-backup''
   ];
 
   # This repo's flake — the VPS pulls it nightly for auto-upgrades

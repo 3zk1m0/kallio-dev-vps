@@ -26,6 +26,7 @@ Internet ──▶ VPS (this repo)                    Home network
 | `services/uptime-kuma.nix` | Uptime monitoring + alerting (via ntfy) |
 | `services/watchtower.nix` | Daily container image updates |
 | `services/bandwidth-alert.nix` | vnstat + daily check; pushes to ntfy past 70% of the provider's monthly transfer cap |
+| `services/backup.nix` | `vps-backup`: streams the non-declarative state as a tarball for the NAS to pull |
 | `.github/workflows/deploy.yml` | CI: eval check on PRs, one-time `nixos-anywhere` bootstrap, `nixos-rebuild` on every push |
 | `.github/workflows/update-flake-lock.yml` | Weekly PR bumping `flake.lock` — this is what actually ships OS updates |
 | `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key) — optional but recommended |
@@ -308,6 +309,92 @@ down".
 4. Optional: publish a public status page from Kuma on its own domain.
 
 State (monitors, history) lives in `/var/lib/uptime-kuma`.
+
+## 10. Backups: pull the state the repo can't rebuild
+
+Almost everything here is declarative — a fresh instance plus this flake gets
+you back to a working box. What a rebuild *cannot* regenerate:
+
+| Path | What's in it |
+|---|---|
+| `/var/lib/pangolin/config` | Pangolin's SQLite DB (sites, resources, users), `config.yml` server secret, Gerbil's WireGuard key, `letsencrypt/acme.json` |
+| `/var/lib/ntfy` | ntfy user/ACL DB + the generated `alerter` password |
+| `/var/lib/uptime-kuma` | Kuma monitors, notification config, history |
+| `/var/lib/vnstat` | Monthly transfer history behind the bandwidth alert |
+| `/var/lib/sops-nix/key.txt` | The age key that decrypts `secrets/secrets.yaml` |
+
+`services/backup.nix` installs a `vps-backup` command that tars those paths to
+**stdout**. Nothing is stored on the VPS and no schedule runs there.
+
+It does *not* stop the containers first. Stopping `docker-pangolin` cascades
+through the `dependsOn` chain to gerbil and traefik, and all public ingress
+stays down until Pangolin's API is serving again — measured at ~70 s, far too
+long for a nightly job. Instead the paths are copied, then every database in
+the copy is overwritten with `sqlite3 .backup` of the live file: SQLite's own
+online backup, consistent under concurrent writes, ~7 s, zero downtime.
+
+**The NAS pulls** over the tailnet — the backup host holds the keys, so the
+internet-facing box needs no NAS credentials and can't reach in to wipe its own
+backups. Everything lives in one directory on the redundant pool:
+
+```
+/mnt/data-hdd/backups/vps/
+├── pull.sh          # ssh in, verify the gzip, rotate at 30 days, ping Kuma
+├── id_ed25519       # key that may run nothing but `vps-backup`
+├── known_hosts      # VPS host key, pinned
+├── push-url         # optional: Uptime Kuma push URL (created by you)
+└── vps-YYYY-MM-DD.tar.gz
+```
+
+Setup on TrueNAS SCALE:
+
+1. **Dataset**: `data-hdd/backups`, with `vps/` inside it at mode 700. Keeping
+   the key and script in a dataset (not `/root`) means they survive OS updates.
+2. **Key**: `ssh-keygen -t ed25519 -f id_ed25519 -N "" -C truenas-vps-backup`,
+   then pin the host key with
+   `ssh-keyscan -t ed25519 <vps-tailnet-ip> > known_hosts`.
+3. **Authorise it** in `vars.nix` `sshKeys`, prefixed so the key is useless for
+   anything else — a stolen NAS key can then only re-read state the NAS already
+   has, not log into the VPS:
+
+   ```
+   restrict,command="/run/current-system/sw/bin/vps-backup" ssh-ed25519 AAAA... truenas-vps-backup
+   ```
+
+   Push to deploy before the first run.
+4. **Schedule**: System Settings → Advanced → Cron Jobs → Add, running
+   `/mnt/data-hdd/backups/vps/pull.sh` as `root` at 03:15 daily. Leave *Hide
+   Standard Output* on and *Hide Standard Error* **off**, so a failure mails
+   you. Note this is NAS-local time — keep it clear of the VPS's 04:00–05:00
+   **UTC** auto-upgrade/reboot window.
+   Use a script, not an inline command: cron treats `%` specially, so an
+   inline `date +%F` breaks.
+5. **Notice when it stops**: add an Uptime Kuma monitor of type *Push* with a
+   ~26 h heartbeat, and drop its URL into `push-url`. `pull.sh` curls it only
+   after a verified archive lands, so ntfy pings you when a night is missed —
+   including the cases a `|| notify` can never catch, like the NAS being off or
+   the cron job being disabled.
+
+Tailscale on TrueNAS runs as an app with host networking, so the host itself
+gets a `tailscale0` interface — cron can reach the VPS's tailnet IP directly,
+no extra routing needed.
+
+> The archive contains the Pangolin server secret, Let's Encrypt private keys
+> and the age key — treat it like a password vault export. Keep it on an
+> encrypted share, `chmod 600`, and off any cloud sync you don't control.
+
+**Restore** onto a fresh instance:
+
+```bash
+# 1. Bootstrap normally (section 3), then before letting it settle:
+ssh root@vps-gateway systemctl stop docker-pangolin docker-traefik docker-ntfy docker-uptime-kuma
+ssh root@vps-gateway tar -xzf - -C / < vps-2026-01-31.tar.gz
+ssh root@vps-gateway reboot
+```
+
+Then point the DNS A record at the new IP (section 6). Sites keep working
+without re-enrolling: their WireGuard keys live in the restored Pangolin DB,
+and Gerbil's key comes back with it.
 
 ## Later: shared login (SSO) for everything
 

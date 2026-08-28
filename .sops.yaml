@@ -1,10 +1,7 @@
-# sops configuration — replace the placeholder with the public half of the
-# age key you generate during setup (see README "Secrets" section):
-#
-#   age-keygen -o key.txt        # public key is printed as "age1..."
-#
+# Public half of the age key at /var/lib/sops-nix/key.txt on the VPS
+# (private half lives in the SOPS_AGE_KEY GitHub secret + Proton Pass).
 keys:
-  - &vps age1REPLACE_WITH_YOUR_AGE_PUBLIC_KEY
+  - &vps age1pkymjzx8lvqd4w6klx6kkt4xarmtm56yah3pu4qky9uuaz8cecgsntw6gq
 creation_rules:
   - path_regex: secrets/secrets\.yaml$
     key_groups:
