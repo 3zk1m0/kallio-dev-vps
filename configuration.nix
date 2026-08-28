@@ -13,6 +13,7 @@ in
     ./services/pangolin.nix
     ./services/ntfy.nix
     ./services/uptime-kuma.nix
+    ./services/bandwidth-alert.nix
   ];
 
   ###########################################################################

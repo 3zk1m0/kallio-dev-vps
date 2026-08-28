@@ -22,9 +22,10 @@ Internet ──▶ VPS (this repo)                    Home network
 | `disk-config.nix` | disko partitioning: hybrid BIOS+EFI boot, ext4 root |
 | `configuration.nix` | Host OS: SSH keys only, fail2ban, firewall, auto-upgrades, Docker, Tailscale, zram + 2 GB `/var/swapfile` |
 | `services/pangolin.nix` | Pangolin ingress stack: dashboard + Gerbil (WireGuard) + Traefik (TLS/routing) |
-| `services/ntfy.nix` | Push notification server |
+| `services/ntfy.nix` | Push notification server; provisions a write-only `alerter` login for local services |
 | `services/uptime-kuma.nix` | Uptime monitoring + alerting (via ntfy) |
 | `services/watchtower.nix` | Daily container image updates |
+| `services/bandwidth-alert.nix` | vnstat + daily check; pushes to ntfy past 70% of the provider's monthly transfer cap |
 | `.github/workflows/deploy.yml` | CI: eval check on PRs, one-time `nixos-anywhere` bootstrap, `nixos-rebuild` on every push |
 | `.github/workflows/update-flake-lock.yml` | Weekly PR bumping `flake.lock` — this is what actually ships OS updates |
 | `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key) — optional but recommended |
@@ -36,6 +37,7 @@ Internet ──▶ VPS (this repo)                    Home network
 - **Docker image updates** daily via Watchtower with `--cleanup` (old images removed)
 - **Docker prune** weekly; container logs rotated (10 MB × 3 per container); journal capped at 200 MB
 - **OOM protection**: zram swap absorbs pressure first, with a 2 GB `/var/swapfile` as backstop — survives Nix builds on 1–2 GB RAM instances
+- **Bandwidth alerting**: vnstat records monthly usage; a daily timer pushes to ntfy once the month's total passes 70% of the cap set in `services/bandwidth-alert.nix`
 - **SSH brute-force protection** via fail2ban
 
 ---
