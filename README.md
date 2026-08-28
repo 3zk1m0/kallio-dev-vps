@@ -25,9 +25,10 @@ Internet ──▶ VPS (this repo)                    Home network
 | `services/ntfy.nix` | Push notification server |
 | `services/uptime-kuma.nix` | Uptime monitoring + alerting (via ntfy) |
 | `services/watchtower.nix` | Daily container image updates |
+| `services/bandwidth-alert.nix` | vnstat + daily check; pushes to ntfy past 70% of the provider's monthly transfer cap |
 | `.github/workflows/deploy.yml` | CI: eval check on PRs, one-time `nixos-anywhere` bootstrap, `nixos-rebuild` on every push |
 | `.github/workflows/update-flake-lock.yml` | Weekly PR bumping `flake.lock` — this is what actually ships OS updates |
-| `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key) — optional but recommended |
+| `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key, ntfy token) — optional but recommended |
 
 ## What the system does for you automatically
 
@@ -36,6 +37,7 @@ Internet ──▶ VPS (this repo)                    Home network
 - **Docker image updates** daily via Watchtower with `--cleanup` (old images removed)
 - **Docker prune** weekly; container logs rotated (10 MB × 3 per container); journal capped at 200 MB
 - **OOM protection**: zram swap absorbs pressure first, with a 2 GB `/var/swapfile` as backstop — survives Nix builds on 1–2 GB RAM instances
+- **Bandwidth alerting**: vnstat records monthly usage; a daily timer pushes to ntfy once the month's total passes 70% of the cap set in `services/bandwidth-alert.nix`
 - **SSH brute-force protection** via fail2ban
 
 ---
@@ -93,6 +95,7 @@ nix shell nixpkgs#age -c age-keygen -o key.txt
 mkdir -p secrets
 nix shell nixpkgs#sops -c sops secrets/secrets.yaml
 #    In the editor, add:   tailscale-authkey: tskey-auth-...
+#                          ntfy-token: tk_...   (docker exec ntfy ntfy token add admin)
 
 # 4. Commit .sops.yaml and secrets/secrets.yaml (they're safe — encrypted).
 #    Store the key.txt contents as the SOPS_AGE_KEY GitHub secret and in your

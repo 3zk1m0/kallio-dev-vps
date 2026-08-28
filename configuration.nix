@@ -13,6 +13,7 @@ in
     ./services/pangolin.nix
     ./services/ntfy.nix
     ./services/uptime-kuma.nix
+    ./services/bandwidth-alert.nix
   ];
 
   ###########################################################################
@@ -78,6 +79,7 @@ in
     defaultSopsFile = ./secrets/secrets.yaml;
     age.keyFile = "/var/lib/sops-nix/key.txt";
     secrets."tailscale-authkey" = { };
+    secrets."ntfy-token" = { };
   };
 
   ###########################################################################
