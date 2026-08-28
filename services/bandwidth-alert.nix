@@ -22,7 +22,7 @@ in
       if [ "$status" -ne 2 ]; then exit "$status"; fi
 
       curl -sSf \
-        -H "Authorization: Bearer $(cat /run/secrets/ntfy-token)" \
+        -u "alerter:$(cat /var/lib/ntfy/alerter-password)" \
         -H "Title: VPS traffic past ${toString alertAtPercent}% of ${toString monthlyLimitGB} GB" \
         -H "Tags: warning" \
         -d "$report" \

@@ -22,13 +22,13 @@ Internet ──▶ VPS (this repo)                    Home network
 | `disk-config.nix` | disko partitioning: hybrid BIOS+EFI boot, ext4 root |
 | `configuration.nix` | Host OS: SSH keys only, fail2ban, firewall, auto-upgrades, Docker, Tailscale, zram + 2 GB `/var/swapfile` |
 | `services/pangolin.nix` | Pangolin ingress stack: dashboard + Gerbil (WireGuard) + Traefik (TLS/routing) |
-| `services/ntfy.nix` | Push notification server |
+| `services/ntfy.nix` | Push notification server; provisions a write-only `alerter` login for local services |
 | `services/uptime-kuma.nix` | Uptime monitoring + alerting (via ntfy) |
 | `services/watchtower.nix` | Daily container image updates |
 | `services/bandwidth-alert.nix` | vnstat + daily check; pushes to ntfy past 70% of the provider's monthly transfer cap |
 | `.github/workflows/deploy.yml` | CI: eval check on PRs, one-time `nixos-anywhere` bootstrap, `nixos-rebuild` on every push |
 | `.github/workflows/update-flake-lock.yml` | Weekly PR bumping `flake.lock` — this is what actually ships OS updates |
-| `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key, ntfy token) — optional but recommended |
+| `.sops.yaml` / `secrets/` | sops-nix encrypted secrets (Tailscale auth key) — optional but recommended |
 
 ## What the system does for you automatically
 
@@ -95,7 +95,6 @@ nix shell nixpkgs#age -c age-keygen -o key.txt
 mkdir -p secrets
 nix shell nixpkgs#sops -c sops secrets/secrets.yaml
 #    In the editor, add:   tailscale-authkey: tskey-auth-...
-#                          ntfy-token: tk_...   (docker exec ntfy ntfy token add admin)
 
 # 4. Commit .sops.yaml and secrets/secrets.yaml (they're safe — encrypted).
 #    Store the key.txt contents as the SOPS_AGE_KEY GitHub secret and in your

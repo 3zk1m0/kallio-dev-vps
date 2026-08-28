@@ -79,7 +79,6 @@ in
     defaultSopsFile = ./secrets/secrets.yaml;
     age.keyFile = "/var/lib/sops-nix/key.txt";
     secrets."tailscale-authkey" = { };
-    secrets."ntfy-token" = { };
   };
 
   ###########################################################################
