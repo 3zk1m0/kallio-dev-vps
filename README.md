@@ -383,18 +383,45 @@ no extra routing needed.
 > and the age key — treat it like a password vault export. Keep it on an
 > encrypted share, `chmod 600`, and off any cloud sync you don't control.
 
-**Restore** onto a fresh instance:
+**Restore** onto a fresh instance. Bootstrap normally (section 3), but leave DNS
+alone until the very end:
 
 ```bash
-# 1. Bootstrap normally (section 3), then before letting it settle:
-ssh root@vps-gateway systemctl stop docker-pangolin docker-traefik docker-ntfy docker-uptime-kuma
-ssh root@vps-gateway tar -xzf - -C / < vps-2026-01-31.tar.gz
-ssh root@vps-gateway reboot
+# Stop everything holding the state open (pangolin cascades to gerbil + traefik)
+ssh root@<new-ip> systemctl stop docker-pangolin docker-ntfy docker-uptime-kuma vnstat
+ssh root@<new-ip> tar -xzf - -C / < vps-2026-01-31.tar.gz
+ssh root@<new-ip> reboot
+# Only now: point the pangolin.<domain> A record at the new IP (section 6)
 ```
 
-Then point the DNS A record at the new IP (section 6). Sites keep working
-without re-enrolling: their WireGuard keys live in the restored Pangolin DB,
-and Gerbil's key comes back with it.
+The stop is not optional. Extract under a running Pangolin and its open handle
+on `db.sqlite` wins — you get a corrupt database, not a restored one.
+
+DNS goes last so the fresh box never serves a half-empty dashboard on the real
+domain, and so Traefik starts from the restored `acme.json` (mode 600, which
+`tar` preserves — Traefik refuses it otherwise) rather than requesting
+certificates it already has.
+
+Nothing regenerates over the top of the restore: `pangolin-setup` writes
+`config.yml` only when the file is absent, so the original server secret
+survives the reboot. Sites reconnect without re-enrolling — their WireGuard
+keys are in the restored Pangolin DB and Gerbil's key comes back with it. The
+age key is in the archive too, so sops decrypts from the next boot even if you
+bootstrapped without the `SOPS_AGE_KEY` secret.
+
+More often you want one service back on an otherwise healthy box:
+
+```bash
+systemctl stop docker-pangolin
+tar -xzf vps-2026-01-31.tar.gz -C / ./var/lib/pangolin
+systemctl start docker-pangolin
+```
+
+> Two caveats. The mechanics above are verified, but a **full restore has never
+> been rehearsed end to end** — proving it takes a scratch instance. And
+> Watchtower keeps images moving: an old database migrates forward into a newer
+> Pangolin but never backward, so after a breaking major bump, pin the image to
+> the version that wrote the archive.
 
 ## Later: shared login (SSO) for everything
 
