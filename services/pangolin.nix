@@ -235,7 +235,7 @@ in
   virtualisation.oci-containers.containers = {
     pangolin = {
       # Rolling patch tag: Watchtower pulls 1.21.x patches, minor bumps are manual.
-      image = "fosrl/pangolin:1.21";
+      image = "fosrl/pangolin:ee-1.21"; # Enterprise Edition; key is activated at /admin/license
       volumes = [ "${dataDir}/config:/app/config" ];
       extraOptions = [ "--network=pangolin" ];
     };
